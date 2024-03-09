@@ -20,7 +20,7 @@ export default function App() {
     setScanned(true);
     console.log(data)
     
-    fetch(`http://172.20.10.2:4000/data-collection/add-data`, { method: `POST`, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({"raw": data}) })
+    fetch(`https://server.palyrobotics.com/data-collection/add-data`, { method: `POST`, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({"raw": data}) })
       .then((response) => {
         console.log(response.text())
         alert('Success!!');
