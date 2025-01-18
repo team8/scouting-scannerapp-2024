@@ -1,26 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Button } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
-import axios from 'axios';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { useState, useRef } from 'react';
+import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function App() {
-  const [hasPermission, setHasPermission] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const lastScannedTimestampRef = useRef(0);
 
-  useEffect(() => {
-    const getBarCodeScannerPermissions = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
 
-    getBarCodeScannerPermissions();
-  }, []);
+  if (!permission) {
+    // Camera permissions are still loading.
+    return <View />;
+  }
 
-  const handleBarCodeScanned = ({ type, data }) => {
+  if (!permission.granted) {
+    // Camera permissions are not granted yet.
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>We need your permission to show the camera</Text>
+        <Button onPress={requestPermission} title="grant permission" />
+      </View>
+    );
+  }
+  const handleBarCodeScanned = ({type, data}) => {
     setScanned(true);
     console.log(data)
+    const timestamp = Date.now();
     
-    fetch(`https://server.palyrobotics.com/data-collection/add-data`, { method: `POST`, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({"raw": data}) })
+    if (scanned || (timestamp - lastScannedTimestampRef.current < 2000)) {
+      //change that 2000 (2 seconds) for whatever value you want 
+      return
+    }
+    lastScannedTimestampRef.current = timestamp;
+    
+    fetch(`http://10.245.28.33:4000/data-collection/add-data`, { method: `POST`, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({"raw": data}) })
       .then((response) => {
         console.log(response.text())
         alert('Success!!');
@@ -31,20 +44,20 @@ export default function App() {
       });
   };
 
-  if (hasPermission === null) {
-    return <Text>Requesting for camera permission</Text>;
-  }
-  if (hasPermission === false) {
-    return <Text>No access to camera</Text>;
-  }
-
   return (
     <View style={styles.container}>
-      <BarCodeScanner
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        style={StyleSheet.absoluteFillObject}
-      />
-      {scanned && <Button title={'Tap to Scan Again'} onPress={() => setScanned(false)} />}
+      <CameraView barcodeScannerSettings={{
+    barcodeTypes: ["qr"],
+    interval: 1000
+  }} style={styles.camera} facing={"back"} onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}>
+        <View style={styles.buttonContainer}>
+          {scanned && 
+          <TouchableOpacity style={styles.button} onPress={() => setScanned(false)}>
+            <Text style={styles.text}>Scan Again</Text>
+          </TouchableOpacity>
+}
+        </View>
+      </CameraView>
     </View>
   );
 }
@@ -52,8 +65,29 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
     justifyContent: 'center',
+  },
+  message: {
+    textAlign: 'center',
+    paddingBottom: 10,
+  },
+  camera: {
+    flex: 1,
+  },
+  buttonContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'transparent',
+    margin: 64,
+  },
+  button: {
+    flex: 1,
+    alignSelf: 'flex-end',
+    alignItems: 'center',
+  },
+  text: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
   },
 });
