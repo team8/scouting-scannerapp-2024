@@ -1,12 +1,26 @@
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { useState, useRef } from 'react';
-import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import { Button, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const scannedRef = useRef(false);
   const lastScannedTimestampRef = useRef(0);
+  // bumping this remounts CameraView, which re-requests the camera stream (needed on web)
+  const [cameraKey, setCameraKey] = useState(0);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    // browsers kill the camera stream when the tab is hidden, so restart it when we come back
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setCameraKey((k) => k + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   if (!permission) {
     // Camera permissions are still loading.
@@ -22,15 +36,22 @@ export default function App() {
       </View>
     );
   }
+  const scanAgain = () => {
+    scannedRef.current = false;
+    setScanned(false);
+    setCameraKey((k) => k + 1);
+  };
+
   const handleBarCodeScanned = ({type, data}) => {
-    setScanned(true);
-    console.log(data)
     const timestamp = Date.now();
     
-    if (scanned || (timestamp - lastScannedTimestampRef.current < 2000)) {
+    if (scannedRef.current || (timestamp - lastScannedTimestampRef.current < 2000)) {
       //change that 2000 (2 seconds) for whatever value you want 
       return
     }
+    scannedRef.current = true;
+    setScanned(true);
+    console.log(data)
     lastScannedTimestampRef.current = timestamp;
     
     fetch(`https://server.palyrobotics.com/data-collection/add-data`, { method: `POST`, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({"raw": data}) })
@@ -46,13 +67,13 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <CameraView barcodeScannerSettings={{
+      <CameraView key={cameraKey} barcodeScannerSettings={{
     barcodeTypes: ["qr"],
     interval: 1000
-  }} style={styles.camera} facing={"back"} onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}>
+  }} style={styles.camera} facing={"back"} onBarcodeScanned={handleBarCodeScanned}>
         <View style={styles.buttonContainer}>
           {scanned && 
-          <TouchableOpacity style={styles.button} onPress={() => setScanned(false)}>
+          <TouchableOpacity style={styles.button} onPress={scanAgain}>
             <Text style={styles.text}>Scan Again</Text>
           </TouchableOpacity>
 }
